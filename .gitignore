@@ -10,3 +10,6 @@ obj/
 
 ## OS
 .DS_Store
+
+## Documentos do enunciado (não incluir no repositório)
+*.docx
