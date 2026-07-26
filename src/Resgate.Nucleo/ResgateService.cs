@@ -3,11 +3,6 @@ using Resgate.Nucleo.Modelos;
 
 namespace Resgate.Nucleo;
 
-/// <summary>
-/// Núcleo do caso de uso "resgatar pontos": valida a entrada, garante idempotência por
-/// reenvio (retry do app mobile) e delega o débito consistente ao repositório, que é
-/// responsável por travar a linha de saldo do cliente durante a operação.
-/// </summary>
 public sealed class ResgateService(IContaPontosRepositorio repositorio, IIdempotenciaStore idempotencia)
 {
     public async Task<ResgateResultado> ResgatarAsync(ResgateRequest request, CancellationToken cancellationToken = default)
@@ -15,7 +10,7 @@ public sealed class ResgateService(IContaPontosRepositorio repositorio, IIdempot
         ValidarRequisicao(request);
 
         var payloadHash = CalcularHashPayload(request);
-        var registroExistente = await idempotencia.ObterAsync(request.IdempotencyKey, cancellationToken);
+        var registroExistente = await idempotencia.ObterAsync(request.IdempotencyKey);
         if (registroExistente is not null)
         {
             if (registroExistente.RequisicaoHash != payloadHash)
@@ -42,7 +37,7 @@ public sealed class ResgateService(IContaPontosRepositorio repositorio, IIdempot
             StatusResgate.Confirmado,
             DateTimeOffset.UtcNow);
 
-        await idempotencia.GravarAsync(new RegistroIdempotencia(request.IdempotencyKey, payloadHash, resultado), cancellationToken);
+        await idempotencia.GravarAsync(new RegistroIdempotencia(request.IdempotencyKey, payloadHash, resultado));
 
         return resultado;
     }
@@ -70,10 +65,11 @@ public sealed class ResgateService(IContaPontosRepositorio repositorio, IIdempot
         }
     }
 
-    private static int CalcularHashPayload(ResgateRequest request) =>
-        HashCode.Combine(
-            request.ClienteId,
-            request.ValorPontos,
-            StringComparer.Ordinal.GetHashCode(request.Canal),
-            request.ReferenciaOrigem is null ? 0 : StringComparer.Ordinal.GetHashCode(request.ReferenciaOrigem));
+    private static int CalcularHashPayload(ResgateRequest request)
+    {
+        var hash = HashCode.Combine(request.ClienteId, request.ValorPontos, request.Canal);
+        if (request.ReferenciaOrigem is not null)
+            hash = HashCode.Combine(hash, request.ReferenciaOrigem);
+        return hash;
+    }
 }

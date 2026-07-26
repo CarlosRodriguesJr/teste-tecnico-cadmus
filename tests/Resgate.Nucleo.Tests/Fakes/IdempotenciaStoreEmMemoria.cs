@@ -1,18 +1,22 @@
-using System.Collections.Concurrent;
 using Resgate.Nucleo;
 
 namespace Resgate.Nucleo.Tests.Fakes;
 
 public sealed class IdempotenciaStoreEmMemoria : IIdempotenciaStore
 {
-    private readonly ConcurrentDictionary<string, RegistroIdempotencia> _registros = new();
+    private readonly Dictionary<string, RegistroIdempotencia> _registros = new();
+    private readonly object _lock = new();
 
-    public Task<RegistroIdempotencia?> ObterAsync(string idempotencyKey, CancellationToken cancellationToken) =>
-        Task.FromResult(_registros.TryGetValue(idempotencyKey, out var registro) ? registro : null);
-
-    public Task GravarAsync(RegistroIdempotencia registro, CancellationToken cancellationToken)
+    public Task<RegistroIdempotencia?> ObterAsync(string idempotencyKey)
     {
-        _registros[registro.IdempotencyKey] = registro;
+        lock (_lock)
+            return Task.FromResult(_registros.TryGetValue(idempotencyKey, out var r) ? r : null);
+    }
+
+    public Task GravarAsync(RegistroIdempotencia registro)
+    {
+        lock (_lock)
+            _registros[registro.IdempotencyKey] = registro;
         return Task.CompletedTask;
     }
 }
